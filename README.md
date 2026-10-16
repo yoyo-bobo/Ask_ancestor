@@ -1,3 +1,4 @@
 # Ask_ancestor
 With the development of AI, many things seem to be easier than before. However, what should we do without AI. This project constructively proposes a method of quoting the wisdom of our ancestor, the Book of Changes.
 This is a simple web-based Liu Yao (I Ching) divination tool. You only need to do three things: think of a question, choose a category (such as career, relationships, or money), and click “Cast.” It automatically tosses three coins six times, just like traditional coin divination, and builds a hexagram. Then, instead of using classical Chinese, it explains in plain language: what your current situation is like, which way things may go, and what to watch out for regarding your question. You don’t need to understand the I Ching to use it. The result is for entertainment and reference only.
+txt is the source file, exe runs by double clicking on windows, html opens in a browser.
