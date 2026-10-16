@@ -1,0 +1,957 @@
+#define UNICODE
+#define _UNICODE
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <wchar.h>
+#include <stdlib.h>
+#include <time.h>
+#include <math.h>
+
+/* ===================== 配色 ===================== */
+#define C_BG        RGB(0x0d,0x0b,0x08)
+#define C_GOLD      RGB(0xc9,0xa9,0x61)
+#define C_GOLD_LT   RGB(0xe8,0xcf,0x94)
+#define C_GOLD_DIM  RGB(0x8a,0x74,0x44)
+#define C_GOLD_DK   RGB(0x4a,0x3e,0x22)
+#define C_RED       RGB(0xa8,0x34,0x2a)
+#define C_RED_LT    RGB(0xe0,0x70,0x5f)
+#define C_PAPER     RGB(0xd8,0xcf,0xbc)
+#define C_TEXT      RGB(0xc8,0xbf,0xab)
+#define C_EDIT_BG   RGB(0x14,0x12,0x0e)
+
+/* ===================== 布局 ===================== */
+#define WIN_W       640
+#define WIN_H       800
+
+#define Y_TITLE      16
+#define Y_SUB        58
+#define Y_RULE       84
+#define Y_QUESTION   96
+#define Y_CAT       142
+#define Y_COIN      184
+#define Y_CAST      274
+#define Y_BOARD     330
+#define Y_RESULT    512
+
+#define ROW_H        28
+#define COIN_R       34
+
+/* ===================== 控件 ID ===================== */
+#define ID_QUESTION  1001
+#define ID_RESULT    1002
+#define ID_CAST      1003
+#define ID_CAT_BASE  1100
+#define TIMER_TOSS   1
+
+/* ===================== 数据结构 ===================== */
+typedef struct {
+    const wchar_t *key;
+    int            n;
+    const wchar_t *name;
+    const wchar_t *level;
+    const wchar_t *direct;
+    const wchar_t *plain;
+} Hexagram;
+
+typedef struct {
+    const wchar_t *cat;
+    const wchar_t *level;
+    const wchar_t *advice;
+} Advice;
+
+typedef struct {
+    int sum;
+    int yang;
+    int changing;
+} Yao;
+
+/* ===================== 六十四卦 ===================== */
+static const Hexagram HEX[64] = {
+    {L"111111",  1, L"乾为天",   L"吉", L"宜进", L"如日中天，力量充沛，适合主动出击。"},
+    {L"000000",  2, L"坤为地",   L"平", L"宜守", L"厚德载物，宜静守待时，不宜冒进。"},
+    {L"100010",  3, L"水雷屯",   L"凶", L"待机", L"万事开头难，宜稳扎稳打，不可急躁。"},
+    {L"010001",  4, L"山水蒙",   L"平", L"宜学", L"蒙昧初开，宜虚心求教，循序渐进。"},
+    {L"111010",  5, L"水天需",   L"平", L"待机", L"时机未到，宜耐心等待，养精蓄锐。"},
+    {L"010111",  6, L"天水讼",   L"凶", L"宜和", L"争讼终凶，宜和解退让，以和为贵。"},
+    {L"010000",  7, L"地水师",   L"平", L"宜谋", L"宜师出有名，统御有方，行事有度。"},
+    {L"000010",  8, L"水地比",   L"吉", L"宜和", L"亲善和睦，择善而从，可得贵人相助。"},
+    {L"111011",  9, L"风天小畜", L"平", L"待机", L"小有积蓄，暂难大展，宜积少成多。"},
+    {L"110111", 10, L"天泽履",   L"平", L"宜慎", L"如履薄冰，谨慎前行则吉，冒进则有失。"},
+    {L"111000", 11, L"地天泰",   L"吉", L"宜进", L"天地交泰，万事亨通，大吉之象。"},
+    {L"000111", 12, L"天地否",   L"凶", L"宜守", L"上下不交，事多阻滞，宜守不宜攻。"},
+    {L"101111", 13, L"天火同人", L"吉", L"宜合", L"宜与人合作，同心协力，公而无私。"},
+    {L"111101", 14, L"火天大有", L"吉", L"宜守", L"丰收之象，宜守成勿骄，顺天休命。"},
+    {L"001000", 15, L"地山谦",   L"吉", L"宜谦", L"谦谦君子，无往不利，吉无不利。"},
+    {L"000100", 16, L"雷地豫",   L"吉", L"宜备", L"顺势而为，但不可耽于逸乐，居安思危。"},
+    {L"100110", 17, L"泽雷随",   L"吉", L"宜随", L"随顺时势，随机应变，择善而从。"},
+    {L"011001", 18, L"山风蛊",   L"凶", L"宜变", L"积弊已深，宜整饬革新，拨乱反正。"},
+    {L"110000", 19, L"地泽临",   L"吉", L"宜进", L"宜亲临其事，居安思危，宽厚待下。"},
+    {L"000011", 20, L"风地观",   L"平", L"宜观", L"静观其变，审时度势，观而后动。"},
+    {L"100101", 21, L"火雷噬嗑", L"平", L"宜断", L"宜果断除障，明断是非，刚柔并济。"},
+    {L"101001", 22, L"山火贲",   L"平", L"宜饰", L"宜修饰外表，但须注重内涵。"},
+    {L"000001", 23, L"山地剥",   L"凶", L"宜守", L"小人道长，君子道消，宜静守自保。"},
+    {L"100000", 24, L"地雷复",   L"吉", L"宜进", L"一阳来复，转机将至，宜顺势而为。"},
+    {L"100111", 25, L"天雷无妄", L"平", L"宜正", L"宜守正不阿，切勿妄动妄求。"},
+    {L"111001", 26, L"山天大畜", L"吉", L"宜蓄", L"宜蓄养实力，厚积薄发。"},
+    {L"100001", 27, L"山雷颐",   L"平", L"宜养", L"宜修身养性，慎言语，节饮食。"},
+    {L"011110", 28, L"泽风大过", L"凶", L"宜变", L"负重过甚，宜权衡轻重，另寻出路。"},
+    {L"010010", 29, L"坎为水",   L"凶", L"宜守", L"重重险阻，宜守正待援，不可轻进。"},
+    {L"101101", 30, L"离为火",   L"吉", L"宜附", L"光明附丽，宜依附正道，柔顺守中。"},
+    {L"001110", 31, L"泽山咸",   L"吉", L"宜感", L"两情相感，宜以诚待人，虚己受人。"},
+    {L"011100", 32, L"雷风恒",   L"吉", L"宜恒", L"宜持之以恒，守常不变，不可半途而废。"},
+    {L"001111", 33, L"天山遁",   L"平", L"宜退", L"宜及时隐退，全身而退，不可恋战。"},
+    {L"111100", 34, L"雷天大壮", L"吉", L"宜慎", L"刚而不暴，壮而守正，不可恃强凌弱。"},
+    {L"000101", 35, L"火地晋",   L"吉", L"宜进", L"如日东升，宜积极进取，前程似锦。"},
+    {L"101000", 36, L"地火明夷", L"凶", L"宜晦", L"宜韬光养晦，隐藏锋芒，以待时机。"},
+    {L"101011", 37, L"风火家人", L"吉", L"宜和", L"宜齐家治内，和睦相处，各守其分。"},
+    {L"110101", 38, L"火泽睽",   L"凶", L"宜和", L"宜求同存异，小事可成，大事难济。"},
+    {L"001010", 39, L"水山蹇",   L"凶", L"宜止", L"见险而止，反身修德，待时而动。"},
+    {L"010100", 40, L"雷水解",   L"吉", L"宜解", L"险难将解，宜把握时机，迅速行动。"},
+    {L"110001", 41, L"山泽损",   L"平", L"宜损", L"宜损己利人，先失后得，损中有益。"},
+    {L"100011", 42, L"风雷益",   L"吉", L"宜进", L"宜损上益下，乘势而上，利有攸往。"},
+    {L"111110", 43, L"泽天夬",   L"平", L"宜决", L"宜当机立断，除恶务尽，但须防险。"},
+    {L"011111", 44, L"天风姤",   L"凶", L"宜慎", L"不期而遇，宜防微杜渐，不可轻信。"},
+    {L"000110", 45, L"泽地萃",   L"吉", L"宜聚", L"宜聚合人力，共谋大业。"},
+    {L"011000", 46, L"地风升",   L"吉", L"宜进", L"宜循序渐进，步步高升。"},
+    {L"010110", 47, L"泽水困",   L"凶", L"宜守", L"身处困境，宜守正待时，不可妄动。"},
+    {L"011010", 48, L"水风井",   L"平", L"宜养", L"宜涵养自身，惠泽他人，守静不移。"},
+    {L"101110", 49, L"泽火革",   L"吉", L"宜变", L"宜顺天应人，革故鼎新。"},
+    {L"011101", 50, L"火风鼎",   L"吉", L"宜新", L"宜鼎新革故，稳固根基。"},
+    {L"100100", 51, L"震为雷",   L"平", L"宜慎", L"宜临危不乱，处变不惊，恐惧修省。"},
+    {L"001001", 52, L"艮为山",   L"平", L"宜止", L"宜适可而止，静心守正，安分守己。"},
+    {L"001011", 53, L"风山渐",   L"吉", L"宜渐", L"宜循序渐进，水到渠成，不可急进。"},
+    {L"110100", 54, L"雷泽归妹", L"凶", L"宜慎", L"宜守分安常，不可躁进。"},
+    {L"101100", 55, L"雷火丰",   L"吉", L"宜守", L"盛极防衰，守成勿骄。"},
+    {L"001101", 56, L"火山旅",   L"平", L"宜慎", L"宜谨慎行事，柔顺谦下。"},
+    {L"011011", 57, L"巽为风",   L"吉", L"宜顺", L"宜顺势而入，谦逊行事。"},
+    {L"110110", 58, L"兑为泽",   L"吉", L"宜和", L"宜和悦待人，以诚相交。"},
+    {L"010011", 59, L"风水涣",   L"平", L"宜聚", L"宜涣散风险，聚合人心。"},
+    {L"110010", 60, L"水泽节",   L"平", L"宜节", L"宜节制有度，不可放纵。"},
+    {L"110011", 61, L"风泽中孚", L"吉", L"宜信", L"宜诚信待人，以信立身。"},
+    {L"001100", 62, L"雷山小过", L"凶", L"宜慎", L"宜小事可为，大事勿行。"},
+    {L"101010", 63, L"水火既济", L"吉", L"宜守", L"功成名就，宜守成防变，慎终如始。"},
+    {L"010101", 64, L"火水未济", L"平", L"宜进", L"事未竟成，宜慎终如始，续力前行。"}
+};
+
+/* ===================== 分类建议 ===================== */
+static const Advice ADVICE[] = {
+    {L"career", L"吉", L"事业运势向上，适合主动争取机会、展现能力。若有跳槽、转行或创业的想法，可积极考虑，成功概率较高。"},
+    {L"career", L"平", L"事业处于平稳期，宜守不宜攻。做好本职工作，积累实力与人脉，等待更合适的时机再动。"},
+    {L"career", L"凶", L"事业当前有阻滞，宜低调行事，避免与人冲突。不宜跳槽或创业，先稳住现有局面，静待转机。"},
+
+    {L"love", L"吉", L"感情发展顺利，宜主动表达心意。单身者有机会遇到良缘，已有伴侣者感情升温，适合推进关系。"},
+    {L"love", L"平", L"感情需要耐心经营，不宜急躁。多沟通、多包容，顺其自然发展，强求反而容易生变。"},
+    {L"love", L"凶", L"感情易生波折，需多包容忍让。避免在冲动之下做决定，给彼此一些空间和时间，冷静处理。"},
+
+    {L"wealth", L"吉", L"财运较旺，投资理财可适度进取。但忌贪心，见好就收，落袋为安，避免因贪致损。"},
+    {L"wealth", L"平", L"财运一般，宜保守理财。不宜大额投资或借贷，守好现有钱财，控制不必要的开支。"},
+    {L"wealth", L"凶", L"财运不佳，切忌投资、借贷或高风险操作。以守为主，捂紧钱袋，避免因财生是非。"},
+
+    {L"health", L"吉", L"身体状况良好，保持规律作息即可。小病小痛容易痊愈，不必过度担忧。"},
+    {L"health", L"平", L"身体无大碍，但需注意休息，避免劳累。防微杜渐，小问题及时处理，不要拖延。"},
+    {L"health", L"凶", L"需要多关注身体，小病及时就医，不可硬扛。调整作息与心态，避免过度劳累和情绪波动。"},
+
+    {L"study", L"吉", L"学习状态佳，效率高，适合冲刺和突破难点。考试运较好，正常发挥即可取得理想成绩。"},
+    {L"study", L"平", L"学习需循序渐进，不可急于求成。打好基础，稳步提升，坚持比突击更有效果。"},
+    {L"study", L"凶", L"学习容易分心，需要静心专注。加倍努力，不可懈怠，必要时寻求师长或同学的帮助。"},
+
+    {L"other", L"吉", L"整体顺利，可放手去做。成功概率较高，但仍需谨慎行事，不可得意忘形。"},
+    {L"other", L"平", L"事情进展平缓，宜按部就班。不可冒进，耐心等待时机，稳中求进。"},
+    {L"other", L"凶", L"事情多有阻碍，宜退守观望。不可强求，避免冲动行事，先保全自身再图后计。"}
+};
+
+/* ===================== 常量 ===================== */
+static const wchar_t *CAT_KEY[6]  = {L"career", L"love", L"wealth", L"health", L"study", L"other"};
+static const wchar_t *CAT_NAME[6] = {L"事业工作", L"感情婚姻", L"财运投资", L"健康疾病", L"学业考试", L"综合"};
+static const wchar_t *POS_NAME[6] = {L"初", L"二", L"三", L"四", L"五", L"上"};
+
+/* ===================== 全局状态 ===================== */
+static HWND  g_hWnd = NULL;
+static HWND  g_hQuestion = NULL;
+static HWND  g_hResult   = NULL;
+static HWND  g_hCast     = NULL;
+static HWND  g_hCat[6]   = {0};
+static int   g_catIdx    = 5;
+
+static Yao   g_yao[6];
+static int   g_yaoCount  = 0;
+static int   g_curYao    = 0;
+static int   g_animFrame = 0;
+static int   g_tossing   = 0;
+static int   g_coinBack[3] = {0,0,0};
+
+static HFONT g_fTitle = NULL, g_fSub = NULL, g_fNormal = NULL,
+             g_fBtn = NULL, g_fCoin = NULL;
+static HBRUSH g_brBg = NULL, g_brEdit = NULL;
+static HBRUSH g_brGold = NULL, g_brGoldDim = NULL,
+              g_brRed = NULL, g_brPlaceholder = NULL, g_brGoldLight = NULL;
+
+static RECT g_rcCoinArea  = {100, Y_COIN - 50, 540, Y_COIN + 100};
+static RECT g_rcBoardArea = {30,  Y_BOARD,  610, Y_BOARD + 6 * ROW_H};
+
+/* ===================== 工具函数 ===================== */
+static const wchar_t *cn_num(int n, wchar_t *buf) {
+    static const wchar_t *num[] = {L"零",L"一",L"二",L"三",L"四",L"五",
+                                   L"六",L"七",L"八",L"九",L"十"};
+    if (n <= 10) return num[n];
+    if (n < 20) {
+        wsprintfW(buf, L"十%s", n % 10 ? num[n % 10] : L"");
+        return buf;
+    }
+    wsprintfW(buf, L"%s十%s", num[n / 10], n % 10 ? num[n % 10] : L"");
+    return buf;
+}
+
+static const wchar_t *yao_name(int idx, int isYang, wchar_t *buf) {
+    const wchar_t *y = isYang ? L"九" : L"六";
+    if (idx == 0) { wsprintfW(buf, L"初%s", y); return buf; }
+    if (idx == 5) { wsprintfW(buf, L"上%s", y); return buf; }
+    wsprintfW(buf, L"%s%s", y, POS_NAME[idx]);
+    return buf;
+}
+
+static const Hexagram *find_hex(const wchar_t *key) {
+    int i;
+    for (i = 0; i < 64; i++) {
+        if (wcscmp(HEX[i].key, key) == 0) return &HEX[i];
+    }
+    return NULL;
+}
+
+static const wchar_t *find_advice(const wchar_t *cat, const wchar_t *level) {
+    int i;
+    int n = (int)(sizeof(ADVICE) / sizeof(ADVICE[0]));
+    for (i = 0; i < n; i++) {
+        if (wcscmp(ADVICE[i].cat, cat) == 0 && wcscmp(ADVICE[i].level, level) == 0)
+            return ADVICE[i].advice;
+    }
+    return L"";
+}
+
+/* ===================== 绘制辅助 ===================== */
+
+static void DrawFrame(HDC hdc, const RECT *rc, COLORREF color) {
+    HPEN pen = CreatePen(PS_SOLID, 1, color);
+    HPEN old = (HPEN)SelectObject(hdc, pen);
+    HBRUSH oldBr = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    Rectangle(hdc, rc->left, rc->top, rc->right, rc->bottom);
+    SelectObject(hdc, oldBr);
+    SelectObject(hdc, old);
+    DeleteObject(pen);
+}
+
+static void FillRectC(HDC hdc, int x, int y, int w, int h, COLORREF color) {
+    RECT r = {x, y, x + w, y + h};
+    HBRUSH br = CreateSolidBrush(color);
+    FillRect(hdc, &r, br);
+    DeleteObject(br);
+}
+
+static void DrawTextC(HDC hdc, const wchar_t *text, int x, int y, int w, int h,
+                      COLORREF color, HFONT font) {
+    HFONT old = (HFONT)SelectObject(hdc, font);
+    SetTextColor(hdc, color);
+    SetBkMode(hdc, TRANSPARENT);
+    RECT r = {x, y, x + w, y + h};
+    DrawTextW(hdc, text, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    SelectObject(hdc, old);
+}
+
+/* ===================== 动态铜钱绘制 ===================== */
+/* 支持 scaleX (0.0~1.0 模拟旋转) 与 scaleY */
+static void DrawCoinEx(HDC hdc, int cx, int cy, int r, double scaleX, int isBack, int highlight) {
+    if (scaleX < 0.05) scaleX = 0.05; // 避免为零时异常
+
+    int rx = (int)(r * scaleX);
+    int ry = r;
+
+    COLORREF outer = RGB(0x6f,0x5a,0x2e);
+    COLORREF mid   = highlight ? RGB(0xe8,0xd4,0x9e) : RGB(0xc9,0xa9,0x61);
+    COLORREF inner = highlight ? RGB(0xf4,0xe3,0xb6) : RGB(0xd8,0xbc,0x7a);
+
+    /* 外圈 */
+    {
+        HBRUSH br = CreateSolidBrush(outer);
+        HBRUSH ob = (HBRUSH)SelectObject(hdc, br);
+        HPEN op   = (HPEN)SelectObject(hdc, GetStockObject(NULL_PEN));
+        Ellipse(hdc, cx - rx, cy - ry, cx + rx, cy + ry);
+        SelectObject(hdc, ob);
+        SelectObject(hdc, op);
+        DeleteObject(br);
+    }
+
+    /* 中圈 */
+    {
+        int r2x = (int)((r - 3) * scaleX);
+        int r2y = r - 3;
+        if (r2x < 1) r2x = 1;
+        HBRUSH br = CreateSolidBrush(mid);
+        HBRUSH ob = (HBRUSH)SelectObject(hdc, br);
+        HPEN op   = (HPEN)SelectObject(hdc, GetStockObject(NULL_PEN));
+        Ellipse(hdc, cx - r2x, cy - r2y, cx + r2x, cy + r2y);
+        SelectObject(hdc, ob);
+        SelectObject(hdc, op);
+        DeleteObject(br);
+    }
+
+    /* 内圈 */
+    {
+        int r3x = (int)((r - 10) * scaleX);
+        int r3y = r - 10;
+        if (r3x < 1) r3x = 1;
+        HBRUSH br = CreateSolidBrush(inner);
+        HBRUSH ob = (HBRUSH)SelectObject(hdc, br);
+        HPEN op   = (HPEN)SelectObject(hdc, GetStockObject(NULL_PEN));
+        Ellipse(hdc, cx - r3x - 1, cy - r3y - 2, cx + r3x - 1, cy + r3y - 2);
+        SelectObject(hdc, ob);
+        SelectObject(hdc, op);
+        DeleteObject(br);
+    }
+
+    /* 方孔 */
+    {
+        int hx = (int)((r / 3) * scaleX);
+        int hy = r / 3;
+        if (hx < 1) hx = 1;
+        HBRUSH br = CreateSolidBrush(RGB(0x0d,0x0b,0x08));
+        HBRUSH ob = (HBRUSH)SelectObject(hdc, br);
+        HPEN op   = (HPEN)SelectObject(hdc, GetStockObject(NULL_PEN));
+        Rectangle(hdc, cx - hx, cy - hy, cx + hx + 1, cy + hy + 1);
+        SelectObject(hdc, ob);
+        SelectObject(hdc, op);
+        DeleteObject(br);
+    }
+
+    /* 正面字样：宽度压缩 */
+    if (!isBack && scaleX > 0.4) {
+        HFONT old = (HFONT)SelectObject(hdc, g_fCoin);
+        SetTextColor(hdc, RGB(0x4d,0x3f,0x1d));
+        SetBkMode(hdc, TRANSPARENT);
+        {
+            int dx = (int)(r * scaleX);
+            RECT r1 = {cx - 12, cy - ry + 4, cx + 12, cy - ry + 20};
+            RECT r2 = {cx + dx - 20, cy - 8, cx + dx - 2, cy + 8};
+            RECT r3 = {cx - 12, cy + ry - 20, cx + 12, cy + ry - 4};
+            RECT r4 = {cx - dx + 2, cy - 8, cx - dx + 20, cy + 8};
+            DrawTextW(hdc, L"乾", -1, &r1, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            DrawTextW(hdc, L"隆", -1, &r2, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            DrawTextW(hdc, L"通", -1, &r3, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            DrawTextW(hdc, L"宝", -1, &r4, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        }
+        SelectObject(hdc, old);
+    }
+}
+
+/* ===================== 绘制卦盘 ===================== */
+static void DrawBoard(HDC hdc) {
+    int i;
+    int cx = WIN_W / 2;
+
+    for (i = 0; i < 6; i++) {
+        int rowY = Y_BOARD + (5 - i) * ROW_H;
+        int barY = rowY + (ROW_H - 12) / 2;
+        int halfW = 62;
+
+        if (i < g_yaoCount) {
+            /* 实际爻 */
+            COLORREF col = g_yao[i].changing ? C_RED_LT : C_GOLD;
+            COLORREF col2 = g_yao[i].changing ? C_RED : C_GOLD;
+
+            if (g_yao[i].yang) {
+                /* 阳爻 */
+                HBRUSH br = CreateSolidBrush(col);
+                RECT r = {cx - halfW, barY, cx + halfW, barY + 11};
+                FillRect(hdc, &r, br);
+                DeleteObject(br);
+                /* 高光 */
+                HBRUSH br2 = CreateSolidBrush(col2);
+                RECT r2 = {cx - halfW, barY + 8, cx + halfW, barY + 11};
+                FillRect(hdc, &r2, br2);
+                DeleteObject(br2);
+            } else {
+                /* 阴爻 */
+                int gap = 13;
+                HBRUSH br = CreateSolidBrush(col);
+                RECT r1 = {cx - halfW, barY, cx - gap, barY + 11};
+                RECT r2 = {cx + gap, barY, cx + halfW, barY + 11};
+                FillRect(hdc, &r1, br);
+                FillRect(hdc, &r2, br);
+                DeleteObject(br);
+                HBRUSH br2 = CreateSolidBrush(col2);
+                RECT r3 = {cx - halfW, barY + 8, cx - gap, barY + 11};
+                RECT r4 = {cx + gap, barY + 8, cx + halfW, barY + 11};
+                FillRect(hdc, &r3, br2);
+                FillRect(hdc, &r4, br2);
+                DeleteObject(br2);
+            }
+
+            /* 右侧爻名 */
+            {
+                wchar_t buf[16];
+                yao_name(i, g_yao[i].yang, buf);
+                HFONT old = (HFONT)SelectObject(hdc, g_fNormal);
+                SetTextColor(hdc, g_yao[i].changing ? C_RED_LT : C_GOLD_DIM);
+                SetBkMode(hdc, TRANSPARENT);
+                {
+                    RECT tr = {cx + halfW + 12, rowY, cx + halfW + 80, rowY + ROW_H};
+                    DrawTextW(hdc, buf, -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                }
+                SelectObject(hdc, old);
+            }
+        } else {
+            /* 占位符 */
+            HBRUSH br = CreateSolidBrush(RGB(0x1c,0x18,0x12));
+            RECT r = {cx - 62, barY + 2, cx + 62, barY + 9};
+            FillRect(hdc, &r, br);
+            DeleteObject(br);
+        }
+    }
+}
+
+/* ===================== 绘制界面 ===================== */
+static void PaintAll(HWND hWnd) {
+    PAINTSTRUCT ps;
+    HDC hdc = BeginPaint(hWnd, &ps);
+
+    HDC memDC = CreateCompatibleDC(hdc);
+    HBITMAP memBmp = CreateCompatibleBitmap(hdc, WIN_W, WIN_H);
+    HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
+
+    /* --- 背景 --- */
+    {
+        RECT rc = {0, 0, WIN_W, WIN_H};
+        FillRect(memDC, &rc, g_brBg);
+    }
+
+    /* --- 顶部光晕 --- */
+    {
+        int i;
+        for (i = 0; i < 30; i++) {
+            int a = (30 - i) * 2;
+            COLORREF c = RGB(0x0d + a/4, 0x0b + a/8, 0x08 + a/16);
+            FillRectC(memDC, 0, i, WIN_W, 1, c);
+        }
+    }
+
+    /* --- 标题 --- */
+    DrawTextC(memDC, L"周  易  六  爻", 0, Y_TITLE, WIN_W, 38, C_GOLD_LT, g_fTitle);
+    DrawTextC(memDC, L"铜钱起卦  ·  白话解卦", 0, Y_SUB, WIN_W, 20, C_GOLD_DIM, g_fSub);
+
+    /* --- 分隔线 --- */
+    {
+        int cx = WIN_W / 2;
+        int i;
+        for (i = -70; i <= 70; i++) {
+            int a = 70 - abs(i);
+            COLORREF c = RGB(0x4a + a/3, 0x3e + a/4, 0x22 + a/8);
+            FillRectC(memDC, cx + i, Y_RULE, 1, 1, c);
+        }
+    }
+
+    /* --- 输入框外框 --- */
+    {
+        RECT r = {39, Y_QUESTION - 1, 601, Y_QUESTION + 35};
+        DrawFrame(memDC, &r, RGB(0x3a,0x30,0x1c));
+    }
+
+    /* --- 类别按钮外框 --- */
+    {
+        int i;
+        for (i = 0; i < 6; i++) {
+            int x = 40 + i * 94;
+            RECT r = {x - 1, Y_CAT - 1, x + 85, Y_CAT + 33};
+            DrawFrame(memDC, &r, RGB(0x2e,0x26,0x16));
+        }
+    }
+
+    /* --- 铜钱抛掷动画绘制 --- */
+    {
+        int baseY = Y_COIN + 42;
+        int cx[3] = {WIN_W/2 - 88, WIN_W/2, WIN_W/2 + 88};
+        int i;
+
+        if (g_tossing && g_animFrame < 20) {
+            // 抛掷动画计算
+            double progress = (double)g_animFrame / 20.0; // 0.0 -> 1.0
+            
+            for (i = 0; i < 3; i++) {
+                // 每枚铜钱加入相位差
+                double phase = i * 0.4;
+                double p = progress * 3.14159;
+                
+                // 抛物线高度计算 (最高腾空 35px)
+                int jumpY = (int)(sin(p) * 35.0 * (1.0 + 0.1 * i)); 
+                int drawY = baseY - jumpY;
+
+                // 旋转翻转计算 (ScaleX 0.0 ~ 1.0)
+                double rot = sin(g_animFrame * 0.6 + phase);
+                double scaleX = fabs(rot);
+                int isBack = ((int)(g_animFrame + i * 3) / 3) % 2;
+
+                DrawCoinEx(memDC, cx[i], drawY, COIN_R, scaleX, isBack, 1);
+            }
+        } else {
+            // 平常定格状态
+            for (i = 0; i < 3; i++) {
+                DrawCoinEx(memDC, cx[i], baseY, COIN_R, 1.0, g_coinBack[i], 0);
+            }
+        }
+    }
+
+    /* --- 卦盘分隔线 --- */
+    {
+        int y1 = Y_BOARD - 12;
+        int y2 = Y_BOARD + 6 * ROW_H + 6;
+        int i;
+        for (i = 0; i < 200; i++) {
+            int x = (WIN_W - 200) / 2 + i;
+            FillRectC(memDC, x, y1, 1, 1, RGB(0x2a,0x22,0x14));
+            FillRectC(memDC, x, y2, 1, 1, RGB(0x2a,0x22,0x14));
+        }
+    }
+
+    /* --- 卦盘 --- */
+    DrawBoard(memDC);
+
+    /* --- 结果框外框 --- */
+    {
+        RECT r = {29, Y_RESULT - 1, 611, WIN_H - 18};
+        DrawFrame(memDC, &r, RGB(0x3a,0x30,0x1c));
+    }
+
+    /* --- 底部提示 --- */
+    DrawTextC(memDC, L"六爻成卦  ·  仅供参考  ·  事在人为",
+              0, WIN_H - 16, WIN_W, 14, RGB(0x3a,0x30,0x1c), g_fSub);
+
+    /* --- 提交 --- */
+    BitBlt(hdc, 0, 0, WIN_W, WIN_H, memDC, 0, 0, SRCCOPY);
+
+    SelectObject(memDC, oldBmp);
+    DeleteObject(memBmp);
+    DeleteDC(memDC);
+
+    EndPaint(hWnd, &ps);
+}
+
+/* ===================== 自绘按钮 ===================== */
+static void DrawOwnerButton(LPDRAWITEMSTRUCT dis) {
+    HDC hdc = dis->hDC;
+    RECT rc = dis->rcItem;
+    int id = (int)dis->CtlID;
+    int pressed = (dis->itemState & ODS_SELECTED) ? 1 : 0;
+    int disabled = (dis->itemState & ODS_DISABLED) ? 1 : 0;
+
+    {
+        HBRUSH br = CreateSolidBrush(C_BG);
+        FillRect(hdc, &rc, br);
+        DeleteObject(br);
+    }
+
+    if (id == ID_CAST) {
+        COLORREF border = disabled ? RGB(0x30,0x28,0x18) :
+                          (pressed ? C_GOLD : RGB(0x7a,0x64,0x38));
+        COLORREF text   = disabled ? RGB(0x50,0x44,0x28) : C_GOLD_LT;
+
+        if (!disabled && pressed) {
+            RECT r = rc;
+            HBRUSH br = CreateSolidBrush(RGB(0x1c,0x18,0x10));
+            FillRect(hdc, &r, br);
+            DeleteObject(br);
+        }
+
+        DrawFrame(hdc, &rc, border);
+        {
+            wchar_t buf[64];
+            GetWindowTextW(g_hCast, buf, 64);
+            HFONT old = (HFONT)SelectObject(hdc, g_fBtn);
+            SetTextColor(hdc, text);
+            SetBkMode(hdc, TRANSPARENT);
+            DrawTextW(hdc, buf, -1, &rc,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(hdc, old);
+        }
+    } else if (id >= ID_CAT_BASE && id < ID_CAT_BASE + 6) {
+        int idx = id - ID_CAT_BASE;
+        int active = (idx == g_catIdx);
+
+        if (active) {
+            RECT r = rc;
+            HBRUSH br = CreateSolidBrush(RGB(0x24,0x1e,0x10));
+            FillRect(hdc, &r, br);
+            DeleteObject(br);
+            DrawFrame(hdc, &rc, C_GOLD);
+        } else {
+            DrawFrame(hdc, &rc, RGB(0x35,0x2c,0x1a));
+        }
+
+        {
+            HFONT old = (HFONT)SelectObject(hdc, g_fNormal);
+            SetTextColor(hdc, active ? C_GOLD_LT : C_GOLD_DIM);
+            SetBkMode(hdc, TRANSPARENT);
+            DrawTextW(hdc, CAT_NAME[idx], -1, &rc,
+                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(hdc, old);
+        }
+    }
+}
+
+/* ===================== 摇卦结果生成 ===================== */
+static void AppendHexBlock(wchar_t *buf, const Hexagram *h,
+                           const wchar_t *catKey, const wchar_t *catName,
+                           const wchar_t *suffix) {
+    wchar_t tmp[1024];
+    wchar_t numBuf[8];
+    const wchar_t *adv = find_advice(catKey, h->level);
+
+    wcscat(buf, L"\r\n");
+    if (suffix && suffix[0]) {
+        wsprintfW(tmp, L"  ── %s ──\r\n", suffix);
+    } else {
+        wcscpy(tmp, L"  ─────────────────────────\r\n");
+    }
+    wcscat(buf, tmp);
+
+    wsprintfW(tmp, L"  卦名：%s（第%s卦）\r\n", h->name, cn_num(h->n, numBuf));
+    wcscat(buf, tmp);
+
+    wsprintfW(tmp, L"  直断：%s（%s）\r\n", h->direct, h->level);
+    wcscat(buf, tmp);
+
+    wsprintfW(tmp, L"  白话：%s\r\n", h->plain);
+    wcscat(buf, tmp);
+
+    wsprintfW(tmp, L"  【%s】%s\r\n", catName, adv);
+    wcscat(buf, tmp);
+}
+
+static void BuildResultText(wchar_t *buf, int bufSize) {
+    wchar_t benKey[7], bianKey[7];
+    const Hexagram *ben, *bian;
+    const wchar_t *catKey  = CAT_KEY[g_catIdx];
+    const wchar_t *catName = CAT_NAME[g_catIdx];
+    wchar_t q[256];
+    int i, nChange = 0;
+    wchar_t tmp[1024];
+    wchar_t numBuf[8];
+
+    buf[0] = 0;
+
+    GetWindowTextW(g_hQuestion, q, 256);
+
+    if (q[0]) {
+        wsprintfW(tmp, L"  【所问】%s\r\n", q);
+        wcscat(buf, tmp);
+    }
+    wsprintfW(tmp, L"  【类别】%s\r\n", catName);
+    wcscat(buf, tmp);
+
+    for (i = 0; i < 6; i++) benKey[i] = g_yao[i].yang ? L'1' : L'0';
+    benKey[6] = 0;
+    ben = find_hex(benKey);
+
+    for (i = 0; i < 6; i++) {
+        int y = g_yao[i].yang;
+        if (g_yao[i].changing) { y = !y; nChange++; }
+        bianKey[i] = y ? L'1' : L'0';
+    }
+    bianKey[6] = 0;
+    bian = (nChange > 0) ? find_hex(bianKey) : NULL;
+
+    if (!ben) return;
+
+    AppendHexBlock(buf, ben, catKey, catName, L"本 卦 · 现 状");
+
+    if (nChange > 0 && bian) {
+        wcscat(buf, L"\r\n");
+        wcscat(buf, L"  ── 动 爻 · 转 机 ──\r\n");
+        wcscat(buf, L"  动爻：");
+        for (i = 0; i < 6; i++) {
+            if (g_yao[i].changing) {
+                yao_name(i, g_yao[i].yang, tmp);
+                wcscat(buf, tmp);
+                wcscat(buf, L" ");
+            }
+        }
+        wsprintfW(tmp, L"（共 %d 爻）\r\n", nChange);
+        wcscat(buf, tmp);
+        if (nChange >= 3) {
+            wcscat(buf, L"  动爻较多，变化较为剧烈，事情正处于转折之中，\r\n");
+            wcscat(buf, L"  宜谨慎应对，多观察、少冲动。\r\n");
+        } else {
+            wcscat(buf, L"  事情正在转化之中，重点留意动爻位置的提示。\r\n");
+        }
+
+        AppendHexBlock(buf, bian, catKey, catName, L"变 卦 · 趋 势");
+    } else {
+        wcscat(buf, L"\r\n");
+        wcscat(buf, L"  ─────────────────────────\r\n");
+        wcscat(buf, L"  此卦无动爻，事态相对稳定，以本卦为主断之即可。\r\n");
+        wcscat(buf, L"  ─────────────────────────\r\n");
+    }
+
+    (void)numBuf;
+    (void)bufSize;
+}
+
+static void ShowResult(void) {
+    static wchar_t buf[8192];
+    BuildResultText(buf, 8192);
+    SetWindowTextW(g_hResult, buf);
+    SendMessageW(g_hResult, EM_SETSEL, 0, 0);
+    SendMessageW(g_hResult, EM_SCROLLCARET, 0, 0);
+}
+
+/* ===================== 摇卦控制 ===================== */
+static void StartCast(void) {
+    int i;
+    if (g_tossing) return;
+
+    g_tossing   = 1;
+    g_yaoCount  = 0;
+    g_curYao    = 0;
+    g_animFrame = 0;
+
+    for (i = 0; i < 3; i++) g_coinBack[i] = 0;
+
+    EnableWindow(g_hCast, FALSE);
+    SetWindowTextW(g_hCast, L"起 卦 中 …");
+    InvalidateRect(g_hCast, NULL, TRUE);
+
+    SetWindowTextW(g_hResult, L"");
+
+    InvalidateRect(g_hWnd, &g_rcCoinArea, FALSE);
+    InvalidateRect(g_hWnd, &g_rcBoardArea, FALSE);
+
+    // 提高 Timer 刷新频率到 25ms 以保证流畅动画
+    SetTimer(g_hWnd, TIMER_TOSS, 25, NULL);
+}
+
+static void SettleYao(void) {
+    int i, back = 0;
+    for (i = 0; i < 3; i++) {
+        g_coinBack[i] = rand() % 2;
+        back += g_coinBack[i];
+    }
+    g_yao[g_curYao].sum      = 6 + back;
+    g_yao[g_curYao].yang     = (back == 1 || back == 3) ? 1 : 0;
+    g_yao[g_curYao].changing = (back == 0 || back == 3) ? 1 : 0;
+    g_yaoCount = g_curYao + 1;
+}
+
+/* ===================== 窗口过程 ===================== */
+static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+
+    case WM_CREATE: {
+        g_hWnd = hWnd;
+        int i;
+        HDC hdc = GetDC(hWnd);
+
+        g_fTitle  = CreateFontW(-32, 0, 0, 0, FW_NORMAL, 0, 0, 0,
+                                DEFAULT_CHARSET, 0, 0, 0, 0, L"楷体");
+        g_fSub    = CreateFontW(-13, 0, 0, 0, FW_NORMAL, 0, 0, 0,
+                                DEFAULT_CHARSET, 0, 0, 0, 0, L"宋体");
+        g_fNormal = CreateFontW(-15, 0, 0, 0, FW_NORMAL, 0, 0, 0,
+                                DEFAULT_CHARSET, 0, 0, 0, 0, L"宋体");
+        g_fBtn    = CreateFontW(-17, 0, 0, 0, FW_NORMAL, 0, 0, 0,
+                                DEFAULT_CHARSET, 0, 0, 0, 0, L"宋体");
+        g_fCoin   = CreateFontW(-12, 0, 0, 0, FW_BOLD, 0, 0, 0,
+                                DEFAULT_CHARSET, 0, 0, 0, 0, L"宋体");
+
+        g_brBg          = CreateSolidBrush(C_BG);
+        g_brEdit        = CreateSolidBrush(C_EDIT_BG);
+        g_brGold        = CreateSolidBrush(C_GOLD);
+        g_brGoldDim     = CreateSolidBrush(C_GOLD_DIM);
+        g_brGoldLight   = CreateSolidBrush(C_GOLD_LT);
+        g_brRed         = CreateSolidBrush(C_RED);
+        g_brPlaceholder = CreateSolidBrush(RGB(0x1c,0x18,0x12));
+
+        g_hQuestion = CreateWindowExW(0, L"EDIT", L"",
+            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            40, Y_QUESTION, 560, 34,
+            hWnd, (HMENU)ID_QUESTION, NULL, NULL);
+        SendMessageW(g_hQuestion, WM_SETFONT, (WPARAM)g_fNormal, TRUE);
+        SendMessageW(g_hQuestion, EM_SETLIMITTEXT, 40, 0);
+
+        for (i = 0; i < 6; i++) {
+            int x = 40 + i * 94;
+            g_hCat[i] = CreateWindowExW(0, L"BUTTON", CAT_NAME[i],
+                WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
+                x, Y_CAT, 86, 32,
+                hWnd, (HMENU)(INT_PTR)(ID_CAT_BASE + i), NULL, NULL);
+        }
+
+        g_hCast = CreateWindowExW(0, L"BUTTON", L"摇    卦",
+            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
+            (WIN_W - 220) / 2, Y_CAST, 220, 46,
+            hWnd, (HMENU)ID_CAST, NULL, NULL);
+
+        g_hResult = CreateWindowExW(0, L"EDIT", L"",
+            WS_CHILD | WS_VISIBLE | WS_VSCROLL |
+            ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
+            30, Y_RESULT, 580, WIN_H - Y_RESULT - 18,
+            hWnd, (HMENU)ID_RESULT, NULL, NULL);
+        SendMessageW(g_hResult, WM_SETFONT, (WPARAM)g_fNormal, TRUE);
+
+        SetWindowTextW(g_hResult,
+            L"\r\n"
+            L"  欢迎使用「周易六爻」白话解卦。\r\n"
+            L"\r\n"
+            L"  使用方法：\r\n"
+            L"    1. 在输入框中写下你所问之事（可留空）；\r\n"
+            L"    2. 选择一个问事类别（事业 / 感情 / 财运 …）；\r\n"
+            L"    3. 点击「摇卦」，静候六爻生成；\r\n"
+            L"    4. 下方将显示本卦、动爻、变卦及白话建议。\r\n"
+            L"\r\n"
+            L"  心诚则灵，仅供参考。\r\n");
+
+        ReleaseDC(hWnd, hdc);
+        return 0;
+    }
+
+    case WM_PAINT:
+        PaintAll(hWnd);
+        return 0;
+
+    case WM_ERASEBKGND:
+        return 1;
+
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLOREDIT: {
+        HDC hdc = (HDC)wParam;
+        HWND hCtl = (HWND)lParam;
+        SetTextColor(hdc, C_TEXT);
+        SetBkColor(hdc, C_EDIT_BG);
+        if (hCtl == g_hResult) SetTextColor(hdc, C_TEXT);
+        return (LRESULT)g_brEdit;
+    }
+
+    case WM_DRAWITEM:
+        DrawOwnerButton((LPDRAWITEMSTRUCT)lParam);
+        return TRUE;
+
+    case WM_COMMAND: {
+        int id = LOWORD(wParam);
+        if (id == ID_CAST) {
+            StartCast();
+        } else if (id >= ID_CAT_BASE && id < ID_CAT_BASE + 6) {
+            if (!g_tossing) {
+                int i;
+                g_catIdx = id - ID_CAT_BASE;
+                for (i = 0; i < 6; i++) {
+                    InvalidateRect(g_hCat[i], NULL, TRUE);
+                }
+            }
+        }
+        return 0;
+    }
+
+    case WM_TIMER:
+        if (wParam == TIMER_TOSS) {
+            g_animFrame++;
+            
+            if (g_animFrame < 20) {
+                // 持续重绘铜钱在空中的翻折与抛跃
+                InvalidateRect(hWnd, &g_rcCoinArea, FALSE);
+            } else if (g_animFrame == 20) {
+                // 定格落子
+                SettleYao();
+                InvalidateRect(hWnd, &g_rcCoinArea, FALSE);
+                InvalidateRect(hWnd, &g_rcBoardArea, FALSE);
+            } else if (g_animFrame > 28) { // 稍微停顿片刻后进行下一爻
+                g_curYao++;
+                g_animFrame = 0;
+
+                if (g_curYao >= 6) {
+                    KillTimer(hWnd, TIMER_TOSS);
+                    g_tossing = 0;
+                    EnableWindow(g_hCast, TRUE);
+                    SetWindowTextW(g_hCast, L"重 新 起 卦");
+                    InvalidateRect(g_hCast, NULL, TRUE);
+
+                    ShowResult();
+                }
+            }
+        }
+        return 0;
+
+    case WM_KEYDOWN:
+        if (wParam == VK_ESCAPE) DestroyWindow(hWnd);
+        return 0;
+
+    case WM_DESTROY:
+        KillTimer(hWnd, TIMER_TOSS);
+        if (g_fTitle)  DeleteObject(g_fTitle);
+        if (g_fSub)    DeleteObject(g_fSub);
+        if (g_fNormal) DeleteObject(g_fNormal);
+        if (g_fBtn)    DeleteObject(g_fBtn);
+        if (g_fCoin)   DeleteObject(g_fCoin);
+        if (g_brBg)          DeleteObject(g_brBg);
+        if (g_brEdit)        DeleteObject(g_brEdit);
+        if (g_brGold)        DeleteObject(g_brGold);
+        if (g_brGoldDim)     DeleteObject(g_brGoldDim);
+        if (g_brGoldLight)   DeleteObject(g_brGoldLight);
+        if (g_brRed)         DeleteObject(g_brRed);
+        if (g_brPlaceholder) DeleteObject(g_brPlaceholder);
+        PostQuitMessage(0);
+        return 0;
+    }
+
+    return DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+/* ===================== 入口 ===================== */
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+                   LPSTR lpCmdLine, int nCmdShow) {
+    WNDCLASSEXW wc = {0};
+    HWND hWnd;
+    MSG msg;
+    RECT rc;
+    int sx, sy;
+
+    (void)hPrevInstance;
+    (void)lpCmdLine;
+
+    srand((unsigned)time(NULL));
+
+    wc.cbSize        = sizeof(WNDCLASSEXW);
+    wc.style         = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc   = WndProc;
+    wc.hInstance     = hInstance;
+    wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
+    wc.hbrBackground = NULL;
+    wc.lpszClassName = L"LiuYaoWindowClass";
+    wc.hIcon         = LoadIcon(NULL, IDI_APPLICATION);
+
+    if (!RegisterClassExW(&wc)) return 1;
+
+    rc.left = 0; rc.top = 0; rc.right = WIN_W; rc.bottom = WIN_H;
+    AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX, FALSE);
+
+    sx = (GetSystemMetrics(SM_CXSCREEN) - (rc.right - rc.left)) / 2;
+    sy = (GetSystemMetrics(SM_CYSCREEN) - (rc.bottom - rc.top)) / 2;
+    if (sy < 0) sy = 0;
+
+    hWnd = CreateWindowExW(
+        0,
+        L"LiuYaoWindowClass",
+        L"周易六爻  ·  铜钱起卦",
+        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN,
+        sx, sy,
+        rc.right - rc.left, rc.bottom - rc.top,
+        NULL, NULL, hInstance, NULL);
+
+    if (!hWnd) return 1;
+
+    ShowWindow(hWnd, nCmdShow);
+    UpdateWindow(hWnd);
+
+    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+        if (!IsDialogMessageW(hWnd, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+
+    return (int)msg.wParam;
+}
